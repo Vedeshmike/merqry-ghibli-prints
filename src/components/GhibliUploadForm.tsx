@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { Upload, Image as ImageIcon } from 'lucide-react';
+import { supabase } from "@/integrations/supabase/client";
 
 interface FormData {
   name: string;
@@ -24,6 +24,7 @@ const GhibliUploadForm = () => {
   });
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [step, setStep] = useState<1 | 2>(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -62,12 +63,55 @@ const GhibliUploadForm = () => {
       return;
     }
 
-    // For now we'll just show a success message
-    // Later this will be connected to Supabase
-    toast({
-      title: "Order received!",
-      description: "We'll contact you soon about your Ghibli art print.",
-    });
+    setIsSubmitting(true);
+    try {
+      // Upload image to Supabase Storage
+      const fileExt = formData.image.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError, data } = await supabase.storage
+        .from('ghibli_artworks')
+        .upload(filePath, formData.image);
+
+      if (uploadError) throw uploadError;
+
+      // Save order details to database
+      const { error: dbError } = await supabase
+        .from('print_orders')
+        .insert({
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email || null,
+          image_path: filePath,
+        });
+
+      if (dbError) throw dbError;
+
+      toast({
+        title: "Order received!",
+        description: "We'll contact you soon about your Ghibli art print.",
+      });
+
+      // Reset form
+      setFormData({
+        name: '',
+        phone: '',
+        email: '',
+        image: null
+      });
+      setPreviewUrl(null);
+      setStep(1);
+    } catch (error) {
+      console.error('Error submitting order:', error);
+      toast({
+        title: "Error submitting order",
+        description: "Please try again later",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -118,6 +162,7 @@ const GhibliUploadForm = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="Your name"
                   required
+                  disabled={isSubmitting}
                 />
               </div>
               <div>
@@ -128,6 +173,7 @@ const GhibliUploadForm = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
                   placeholder="Your phone number"
                   required
+                  disabled={isSubmitting}
                 />
               </div>
               <div>
@@ -138,11 +184,12 @@ const GhibliUploadForm = () => {
                   value={formData.email}
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                   placeholder="Your email"
+                  disabled={isSubmitting}
                 />
               </div>
             </div>
-            <Button type="submit" className="w-full">
-              Submit Order
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Submitting..." : "Submit Order"}
             </Button>
           </div>
         )}
