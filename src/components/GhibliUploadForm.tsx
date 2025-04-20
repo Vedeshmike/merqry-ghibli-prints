@@ -1,15 +1,17 @@
-
 import { useState } from 'react';
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 import ImageUpload from './upload/ImageUpload';
 import UserDetailsForm from './upload/UserDetailsForm';
 import type { FormData } from '@/types/form';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 const GhibliUploadForm = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState<FormData>({
     name: '',
     phone: '',
@@ -20,6 +22,7 @@ const GhibliUploadForm = () => {
   const [step, setStep] = useState<1 | 2>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   const handleImageSelect = (file: File) => {
     setFormData(prev => ({ ...prev, image: file }));
@@ -31,7 +34,7 @@ const GhibliUploadForm = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmitAttempt = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.image) {
       toast({
@@ -51,15 +54,21 @@ const GhibliUploadForm = () => {
       return;
     }
 
+    setShowConfirmDialog(true);
+  };
+
+  const handleSubmit = async () => {
     setIsSubmitting(true);
+    setShowConfirmDialog(false);
+    
     try {
-      const fileExt = formData.image.name.split('.').pop();
+      const fileExt = formData.image!.name.split('.').pop();
       const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('ghibli_artworks')
-        .upload(filePath, formData.image);
+        .upload(filePath, formData.image!);
 
       if (uploadError) throw uploadError;
 
@@ -87,6 +96,11 @@ const GhibliUploadForm = () => {
     }
   };
 
+  const handleSuccessDialogClose = () => {
+    setShowSuccessDialog(false);
+    navigate('/');
+  };
+
   return (
     <>
       <Card className="w-full max-w-md p-6 space-y-6">
@@ -95,7 +109,7 @@ const GhibliUploadForm = () => {
           <p className="text-muted-foreground">Transform your Ghibli art into beautiful prints</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmitAttempt} className="space-y-6">
           {step === 1 ? (
             <ImageUpload onImageSelect={handleImageSelect} />
           ) : (
@@ -104,13 +118,39 @@ const GhibliUploadForm = () => {
               previewUrl={previewUrl}
               isSubmitting={isSubmitting}
               onChange={handleFieldChange}
-              onSubmit={handleSubmit}
+              onSubmit={handleSubmitAttempt}
             />
           )}
         </form>
       </Card>
 
-      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Your Order</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {previewUrl && (
+              <div className="relative h-48 rounded-lg overflow-hidden">
+                <img
+                  src={previewUrl}
+                  alt="Order Preview"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+            <p>Please confirm that this is the correct image for your order.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>Cancel</Button>
+            <Button onClick={handleSubmit} disabled={isSubmitting}>
+              {isSubmitting ? "Submitting..." : "Confirm Order"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showSuccessDialog} onOpenChange={handleSuccessDialogClose}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Order Submitted Successfully!</DialogTitle>
