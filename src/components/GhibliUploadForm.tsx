@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import ImageUpload from './upload/ImageUpload';
 import UserDetailsForm from './upload/UserDetailsForm';
 import type { FormData } from '@/types/form';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const GhibliUploadForm = () => {
   const { toast } = useToast();
@@ -18,6 +19,7 @@ const GhibliUploadForm = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [step, setStep] = useState<1 | 2>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
   const handleImageSelect = (file: File) => {
     setFormData(prev => ({ ...prev, image: file }));
@@ -55,34 +57,24 @@ const GhibliUploadForm = () => {
       const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      const { error: uploadError, data } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('ghibli_artworks')
         .upload(filePath, formData.image);
 
       if (uploadError) throw uploadError;
 
-      const { data: orderData, error: dbError } = await supabase
+      const { error: dbError } = await supabase
         .from('print_orders')
         .insert({
           name: formData.name,
           phone: formData.phone,
           email: formData.email || null,
           image_path: filePath,
-        })
-        .select()
-        .single();
+        });
 
       if (dbError) throw dbError;
 
-      const { data: { url }, error: stripeError } = await supabase.functions
-        .invoke('create-payment', {
-          body: { orderDetails: orderData },
-        });
-
-      if (stripeError) throw stripeError;
-
-      window.location.href = url;
-
+      setShowSuccessDialog(true);
     } catch (error) {
       console.error('Error submitting order:', error);
       toast({
@@ -90,31 +82,46 @@ const GhibliUploadForm = () => {
         description: "Please try again later",
         variant: "destructive"
       });
+    } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <Card className="w-full max-w-md p-6 space-y-6">
-      <div className="text-center space-y-2">
-        <h1 className="text-3xl font-sen font-bold text-foreground">Merqry Prints</h1>
-        <p className="text-muted-foreground">Transform your Ghibli art into beautiful prints</p>
-      </div>
+    <>
+      <Card className="w-full max-w-md p-6 space-y-6">
+        <div className="text-center space-y-2">
+          <h1 className="text-3xl font-sen font-bold text-foreground">Merqry Prints</h1>
+          <p className="text-muted-foreground">Transform your Ghibli art into beautiful prints</p>
+        </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {step === 1 ? (
-          <ImageUpload onImageSelect={handleImageSelect} />
-        ) : (
-          <UserDetailsForm
-            formData={formData}
-            previewUrl={previewUrl}
-            isSubmitting={isSubmitting}
-            onChange={handleFieldChange}
-            onSubmit={handleSubmit}
-          />
-        )}
-      </form>
-    </Card>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {step === 1 ? (
+            <ImageUpload onImageSelect={handleImageSelect} />
+          ) : (
+            <UserDetailsForm
+              formData={formData}
+              previewUrl={previewUrl}
+              isSubmitting={isSubmitting}
+              onChange={handleFieldChange}
+              onSubmit={handleSubmit}
+            />
+          )}
+        </form>
+      </Card>
+
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Order Submitted Successfully!</DialogTitle>
+          </DialogHeader>
+          <div className="text-center space-y-4 py-4">
+            <p>Thank you for your order. We will follow up with you and get your order delivered as soon as possible.</p>
+            <p className="text-muted-foreground">Our team will contact you at the provided phone number: {formData.phone}</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
