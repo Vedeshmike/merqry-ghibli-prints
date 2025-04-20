@@ -77,31 +77,30 @@ const GhibliUploadForm = () => {
       if (uploadError) throw uploadError;
 
       // Save order details to database
-      const { error: dbError } = await supabase
+      const { data: orderData, error: dbError } = await supabase
         .from('print_orders')
         .insert({
           name: formData.name,
           phone: formData.phone,
           email: formData.email || null,
           image_path: filePath,
-        });
+        })
+        .select()
+        .single();
 
       if (dbError) throw dbError;
 
-      toast({
-        title: "Order received!",
-        description: "We'll contact you soon about your Ghibli art print.",
-      });
+      // Create Stripe checkout session
+      const { data: { url }, error: stripeError } = await supabase.functions
+        .invoke('create-payment', {
+          body: { orderDetails: orderData },
+        });
 
-      // Reset form
-      setFormData({
-        name: '',
-        phone: '',
-        email: '',
-        image: null
-      });
-      setPreviewUrl(null);
-      setStep(1);
+      if (stripeError) throw stripeError;
+
+      // Redirect to Stripe Checkout
+      window.location.href = url;
+
     } catch (error) {
       console.error('Error submitting order:', error);
       toast({
@@ -109,7 +108,6 @@ const GhibliUploadForm = () => {
         description: "Please try again later",
         variant: "destructive"
       });
-    } finally {
       setIsSubmitting(false);
     }
   };
