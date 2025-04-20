@@ -1,4 +1,5 @@
-import { useState } from 'react';
+
+import { useState, useEffect } from 'react';
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,6 +24,14 @@ const GhibliUploadForm = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
+  // Add effect to redirect when success dialog is closed
+  useEffect(() => {
+    if (!showSuccessDialog && formData.image && isSubmitting === false && step === 2) {
+      // This means we've submitted successfully and closed the dialog
+      navigate('/', { replace: true });
+    }
+  }, [showSuccessDialog, navigate, formData.image, isSubmitting, step]);
 
   const handleImageSelect = (file: File) => {
     setFormData(prev => ({ ...prev, image: file }));
@@ -98,7 +107,7 @@ const GhibliUploadForm = () => {
 
   const handleSuccessDialogClose = () => {
     setShowSuccessDialog(false);
-    navigate('/');
+    // The redirect will now be handled by the useEffect
   };
 
   return (
